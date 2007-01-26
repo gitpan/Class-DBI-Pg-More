@@ -36,14 +36,14 @@ use warnings FATAL => 'all';
 package Class::DBI::Pg::More;
 use base 'Class::DBI::Pg';
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub _handle_pg_datetime {
 	my ($class, $col, $type) = @_;
 	my $func;
 	if ($type eq 'date') {
 		$func = "has_$type";
-	} elsif ($type =~ /^(time\w+)/) {
+	} elsif ($type =~ /^(time\w*)/) {
 		$func = "has_$1";
 		$func .= "tz" unless $type =~ /without time zone/;
 	} else {

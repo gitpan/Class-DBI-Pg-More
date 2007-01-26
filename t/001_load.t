@@ -1,7 +1,7 @@
 use strict;
 use warnings FATAL => 'all';
 
-use Test::More tests => 15;
+use Test::More tests => 16;
 use Test::TempDatabase;
 
 BEGIN { use_ok( 'Class::DBI::Pg::More' ); }
@@ -11,7 +11,8 @@ my $tdb = Test::TempDatabase->create(dbname => 'ht_class_dbi_test',
 my $dbh = $tdb->handle;
 $dbh->do('SET client_min_messages TO error');
 $dbh->do("CREATE TABLE table1 (id serial primary key, d1 date
-		, d2 timestamp default now())");
+		, d2 timestamp default now()
+		, d3 time default now())");
 
 package T1;
 use base 'Class::DBI::Pg::More';
@@ -22,7 +23,7 @@ package main;
 is(T1->can('has_date'), undef);
 
 T1->set_up_table('table1');
-is_deeply([ sort T1->columns ], [ qw(d1 d2 id) ]);
+is_deeply([ sort T1->columns ], [ qw(d1 d2 d3 id) ]);
 isnt(T1->can('has_date'), undef);
 
 my $id_i = T1->pg_column_info('id');
@@ -44,3 +45,4 @@ isnt($obj, undef);
 is($obj->d1->year, 1990);
 isnt($obj->d2, undef);
 is($obj->d2->minute, DateTime->now->minute);
+is($obj->d3->minute, DateTime->now->minute);
