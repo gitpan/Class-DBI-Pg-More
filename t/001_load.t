@@ -1,7 +1,7 @@
 use strict;
 use warnings FATAL => 'all';
 
-use Test::More tests => 16;
+use Test::More tests => 20;
 use Test::TempDatabase;
 
 BEGIN { use_ok( 'Class::DBI::Pg::More' ); }
@@ -22,8 +22,9 @@ package main;
 
 is(T1->can('has_date'), undef);
 
-T1->set_up_table('table1');
+T1->set_up_table('table1', { ColumnGroup => 'Essential' });
 is_deeply([ sort T1->columns ], [ qw(d1 d2 d3 id) ]);
+is(scalar(T1->_essential), 4);
 isnt(T1->can('has_date'), undef);
 
 my $id_i = T1->pg_column_info('id');
@@ -46,3 +47,21 @@ is($obj->d1->year, 1990);
 isnt($obj->d2, undef);
 is($obj->d2->minute, DateTime->now->minute);
 is($obj->d3->minute, DateTime->now->minute);
+
+my $arr = $dbh->selectcol_arrayref("select count(*) from table1");
+is($arr->[0], 1);
+
+$dbh->do("CREATE TABLE table2 (id serial primary key, t1 text, t2 text)");
+
+package T2;
+use base 'Class::DBI::Pg::More';
+sub db_Main { return $dbh; }
+__PACKAGE__->set_up_table('table2', { ColumnGroup => 'Essential' });
+__PACKAGE__->set_exec_sql("up_te2", "update __TABLE__ set t2 = ? where t1 = ?");
+
+package main;
+
+T2->create({ t1 => $_, t2 => 'ff' }) for qw(a b c);
+ok(T2->up_te2_execute('gg', 'b'));
+$arr = $dbh->selectcol_arrayref("select count(*) from table2 where t2 = 'gg'");
+is($arr->[0], 1);

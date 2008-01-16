@@ -10,7 +10,7 @@ WriteMakefile(
     ABSTRACT     => 'Enhances Class::DBI::Pg with more goodies',
     PREREQ_PM    => {
                      'Test::Simple' => 0.44,
-                     'Test::TempDatabase' => '',
+                     'Test::TempDatabase' => '0.12',
 		     'Class::DBI::Pg' => '0.09',
 		     'Class::DBI::Plugin::DateTime::Pg' => ''
                     },

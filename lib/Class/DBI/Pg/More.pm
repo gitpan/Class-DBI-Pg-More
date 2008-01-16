@@ -36,7 +36,7 @@ use warnings FATAL => 'all';
 package Class::DBI::Pg::More;
 use base 'Class::DBI::Pg';
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub _handle_pg_datetime {
 	my ($class, $col, $type) = @_;
@@ -67,7 +67,7 @@ fields, so you should use DateTime values with them.
 =cut
 sub set_up_table {
 	my ($class, $table, $args) = @_;
-	$class->SUPER::set_up_table($table);
+	$class->SUPER::set_up_table($table, $args);
 
 	my %infos;
 	my $arr = $class->db_Main->selectall_arrayref(<<ENDS
@@ -82,6 +82,20 @@ ENDS
 		$infos{ $a->[0] } = $i;
 	}
 	$class->mk_classdata("Pg_Column_Infos", \%infos);
+}
+
+=head2 $class->set_exec_sql($name, $sql)
+
+Wraps C<Ima::DBI> C<set_sql> methods to create C<$name_execute> function
+which basically calls C<execute> on C<sql_$name> handle.
+
+=cut
+sub set_exec_sql {
+	my ($class, $name, $sql) = @_;
+	$class->set_sql($name, $sql);
+	my $f = "sql_$name";
+	no strict 'refs';
+	*{ "$class\::$name\_execute" } = sub { shift()->$f->execute(@_); };
 }
 
 =head2 $class->pg_column_info($column)
