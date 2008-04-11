@@ -1,10 +1,12 @@
 use strict;
 use warnings FATAL => 'all';
 
-use Test::More tests => 20;
+use Test::More tests => 32;
 use Test::TempDatabase;
 
 BEGIN { use_ok( 'Class::DBI::Pg::More' ); }
+
+is($Class::DBI::Weaken_Is_Available, 0);
 
 my $tdb = Test::TempDatabase->create(dbname => 'ht_class_dbi_test',
 		dbi_args => { RootClass => 'DBIx::ContextualFetch' });
@@ -58,10 +60,40 @@ use base 'Class::DBI::Pg::More';
 sub db_Main { return $dbh; }
 __PACKAGE__->set_up_table('table2', { ColumnGroup => 'Essential' });
 __PACKAGE__->set_exec_sql("up_te2", "update __TABLE__ set t2 = ? where t1 = ?");
+__PACKAGE__->set_exec_sql("pos_up", "update __TABLE__ set t1 = ?, t2 = ?"
+		. " where id = ?", undef, undef, 'id');
+__PACKAGE__->set_exec_sql("pos_ins", "insert into __TABLE__ (id, t1, t2)"
+		. " values (?, ?, ?)", undef, 't1');
+__PACKAGE__->set_fetch_sql("by_id_arr", "select t1, t2 from __TABLE__"
+		. " where id = ?", undef, 'id');
+__PACKAGE__->set_fetch_sql("by_id_hash", "select t1, t2 from __TABLE__"
+		. " where id = ?", {}, 'id');
 
 package main;
 
 T2->create({ t1 => $_, t2 => 'ff' }) for qw(a b c);
-ok(T2->up_te2_execute('gg', 'b'));
+ok(T2->exec_up_te2('gg', 'b'));
 $arr = $dbh->selectcol_arrayref("select count(*) from table2 where t2 = 'gg'");
 is($arr->[0], 1);
+
+my $t2 = T2->create({ t1 => 'opa', t2 => 'gopa' });
+$t2->exec_pos_up('xxx', 'yyy');
+$t2 = T2->retrieve($t2->id);
+is($t2->t1, 'xxx');
+is($t2->t2, 'yyy');
+
+is(T2->exec_pos_up('kkk', 'lll', $t2->id), 1);
+my $t3 = T2->retrieve($t2->id);
+is($t3->t1, 'kkk');
+is($t3->t2, 'lll');
+
+is(T2->exec_pos_up('kkk', 'lll', 864), 0);
+
+$t3->exec_pos_ins(333, 'ggg');
+my $t333 = T2->retrieve(333);
+is($t333->id, 333);
+is($t333->t1, 'kkk');
+is($t333->t2, 'ggg');
+
+is_deeply($t333->fetch_by_id_arr, [ [ 'kkk', 'ggg' ] ]);
+is_deeply(T2->fetch_by_id_hash($t333->id), [ { t1 => 'kkk', t2 => 'ggg' } ]);

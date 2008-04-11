@@ -36,7 +36,8 @@ use warnings FATAL => 'all';
 package Class::DBI::Pg::More;
 use base 'Class::DBI::Pg';
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
+$Class::DBI::Weaken_Is_Available = 0;
 
 sub _handle_pg_datetime {
 	my ($class, $col, $type) = @_;
@@ -84,18 +85,69 @@ ENDS
 	$class->mk_classdata("Pg_Column_Infos", \%infos);
 }
 
-=head2 $class->set_exec_sql($name, $sql)
+sub _do_execute {
+	my ($self, $sql, $arg_map, @rest) = @_;
+	my @args;
+	if (!(ref($self) && @$arg_map)) {
+		@args = @rest;
+		goto OUT;
+	}
+	for (my $i = 0; $i < @$arg_map; $i++) {
+		my $a = $arg_map->[$i];
+		push @args, $a ? $self->$a : shift @rest;
+	}
+	push @args, @rest;
+OUT:
+	my $sth = $self->$sql;
+	$sth->execute(@args);
+	return $sth;
+}
 
-Wraps C<Ima::DBI> C<set_sql> methods to create C<$name_execute> function
-which basically calls C<execute> on C<sql_$name> handle.
-
-=cut
-sub set_exec_sql {
-	my ($class, $name, $sql) = @_;
+sub _do_set_sql {
+	my ($class, $name, $sql, $ex, $cb, @arg_map) = @_;
 	$class->set_sql($name, $sql);
 	my $f = "sql_$name";
 	no strict 'refs';
-	*{ "$class\::$name\_execute" } = sub { shift()->$f->execute(@_); };
+	*{ "$class\::$ex\_$name" } = sub {
+		return $cb->(shift()->_do_execute($f, \@arg_map, @_));
+	};
+}
+
+=head2 $class->set_exec_sql($name, $sql, @arg_map)
+
+Wraps C<Ima::DBI> C<set_sql> methods to create C<exec_$name> function
+which basically calls C<execute> on C<sql_$name> handle.
+
+C<@arg_map> provides mapping of the arguments to the exec function. It can
+be used to call instance methods to get execution parameters.
+
+For example given "update __TABLE__ set col = ? where id = ?" statement
+argument map (undef, "id") tells to substitute last parameter by results of the
+$self->id function.
+
+=cut
+sub set_exec_sql {
+	my ($class, $name, $sql, @arg_map) = @_;
+	$class->_do_set_sql($name, $sql, "exec"
+			, sub { return $_[0]->rows; }, @arg_map);
+}
+
+=head2 $class->set_exec_sql($name, $sql, $slice, @arg_map)
+
+Wraps C<Ima::DBI> C<set_sql> methods to create C<fetch_$name> function
+which basically calls C<execute> and C<fetchall_arrayref> on C<sql_$name>
+handle.
+
+For description of C<$slice> parameter see DBI C<fetchall_arrayref> function.
+
+C<@arg_map> is described above.
+
+=cut
+sub set_fetch_sql {
+	my ($class, $name, $sql, $slice, @arg_map) = @_;
+	$class->_do_set_sql($name, $sql, "fetch", sub {
+		return $_[0]->fetchall_arrayref($slice);
+	}, @arg_map);
 }
 
 =head2 $class->pg_column_info($column)
