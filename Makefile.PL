@@ -11,7 +11,6 @@ WriteMakefile(
     PREREQ_PM    => {
                      'Test::Simple' => 0.44,
                      'Test::TempDatabase' => '0.12',
-		     'Class::DBI::Pg' => '0.09',
 		     'Class::DBI::Plugin::DateTime::Pg' => ''
                     },
 );

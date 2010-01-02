@@ -34,10 +34,32 @@ use strict;
 use warnings FATAL => 'all';
 
 package Class::DBI::Pg::More;
-use base 'Class::DBI::Pg';
+use base 'Class::DBI';
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 $Class::DBI::Weaken_Is_Available = 0;
+
+sub find_primary_key {
+	my ($class, $dbh, $table) = @_;
+	return $dbh->selectcol_arrayref(<<'ENDS', undef, $table);
+SELECT a.attname FROM pg_class c, pg_attribute a, pg_index i, pg_namespace n,
+       generate_series(0, current_setting('max_index_keys')::integer ) idx(n)
+WHERE c.oid = a.attrelid AND c.oid = i.indrelid AND i.indisprimary
+	AND a.attnum = i.indkey[idx.n] AND NOT a.attisdropped
+	AND has_schema_privilege(n.oid, 'USAGE'::text)
+	AND n.nspname NOT LIKE 'pg!_%' ESCAPE '!'
+	AND has_table_privilege(c.oid, 'SELECT'::text)
+	AND c.relnamespace = n.oid and c.relname = ? and nspname = 'public';
+ENDS
+}
+
+sub find_columns {
+	my ($class, $dbh, $table) = @_;
+	return $dbh->selectall_arrayref(<<ENDS, undef, $table);
+SELECT column_name, data_type, is_nullable FROM information_schema.columns
+	WHERE table_name = ? and table_schema = 'public'
+ENDS
+}
 
 sub _handle_pg_datetime {
 	my ($class, $col, $type) = @_;
@@ -67,15 +89,26 @@ fields, so you should use DateTime values with them.
 
 =cut
 sub set_up_table {
-	my ($class, $table, $args) = @_;
-	$class->SUPER::set_up_table($table, $args);
+	my ( $class, $table, $opts) = @_;
+	$opts ||= {};
+
+	my $dbh = $class->db_Main;
+	my @primary = @{ $opts->{Primary} || $class->find_primary_key($dbh, $table) }
+		or die "$table has no primary key";
 
 	my %infos;
-	my $arr = $class->db_Main->selectall_arrayref(<<ENDS
-SELECT column_name, data_type, is_nullable FROM information_schema.columns
-	WHERE table_name = ?
-ENDS
-		, undef, $table);
+	my $arr = $class->find_columns($dbh, $table);
+	$class->table($table);
+	$class->columns(Primary => @primary);
+	$class->columns(($opts->{ColumnGroup} || 'Essential') => map { $_->[0] } @$arr);
+
+	my $def = $dbh->selectcol_arrayref(q{ select column_default
+			from information_schema.columns where column_name = ?
+				and table_name = ? and table_schema = 'public' }
+			, undef, $table, $primary[0])->[0];
+	my ($seq) = ($def =~ /nextval\(\'(\w+)/) if $def;
+	$class->sequence($seq) if $seq;
+
 	for my $a (@$arr) {
 		my $i = { type => $a->[1] };
 		$class->_handle_pg_datetime($a->[0], $a->[1]);

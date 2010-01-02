@@ -3,6 +3,7 @@ use warnings FATAL => 'all';
 
 use Test::More tests => 32;
 use Test::TempDatabase;
+use Carp;
 
 BEGIN { use_ok( 'Class::DBI::Pg::More' ); }
 
@@ -22,6 +23,7 @@ sub db_Main { return $dbh; }
 
 package main;
 
+$SIG{__DIE__} = sub { diag(Carp::longmess(@_)); exit; };
 is(T1->can('has_date'), undef);
 
 T1->set_up_table('table1', { ColumnGroup => 'Essential' });
